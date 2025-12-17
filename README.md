@@ -1,6 +1,6 @@
 # rag_project
 RAG application deploy on the cloud
-##link of the application : https://rag-project-162391846946.europe-west1.run.app/
+## link of the application : https://rag-project-162391846946.europe-west1.run.app/
 
 Project: Educational Agent for Political Science Course (RAG + CoT Reasoning)
 Our project aims to develop an intelligent agent designed to assist students in
