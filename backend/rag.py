@@ -10,11 +10,13 @@ from dotenv import load_dotenv
 # LangChain
 from langchain_community.vectorstores import PGVector
 from langchain_openai import OpenAIEmbeddings
-from langchain.prompts import PromptTemplate
 from langchain.chat_models import ChatOpenAI
-from langchain.chains import LLMChain
 from langchain_community.utilities import SerpAPIWrapper
+from langchain.tools import tool
 from langchain.schema import Document
+from langchain.agents import initialize_agent, AgentType
+from langchain.schema import SystemMessage
+
 
 load_dotenv()
 
@@ -73,67 +75,88 @@ def format_chunks(chunks):
 # -------------------
 serp = SerpAPIWrapper()  # nécessite SERPAPI_API_KEY dans .env
 
-def external_search(query: str):
-    results = serp.run(query)
-    return results
+@tool
+def external_search_tool(query: str) -> str:
+    """
+    Effectue une recherche Internet via SerpAPI.
+    À utiliser uniquement si les informations ne sont pas disponibles
+    dans les documents internes ou si des notions sont complexes.
+    """
+    return serp.run(query)
+
+@tool
+def internal_document_search(query: str) -> str:
+    """
+    Recherche des informations pertinentes dans les documents internes
+    stockés dans la base vectorielle.
+    """
+    docs = retrieve_relevant_chunks(query)
+    return format_chunks(docs)
 
 # -------------------
 # CoT + synthèse
 # -------------------
+
+
+SYSTEM_PROMPT = """
+Tu es un assistant pédagogique pour un cours de science politique.
+
+Tu as accès à deux sources :
+- Documents internes (via un outil de recherche interne)
+- Recherche Internet (via un outil externe)
+
+Règles strictes :
+- Utilise TOUJOURS les documents internes en priorité
+- Utilise la recherche Internet UNIQUEMENT si les documents internes sont insuffisants
+- Indique clairement la provenance des informations utilisées (interne / externe) et commence par dire quelle "tool" tu utilises
+- Ne fais aucune supposition sans source
+
+Style :
+- Clair
+- Structuré
+- Pédagogique
+"""
+
+
+
 llm = ChatOpenAI(model_name="gpt-4", temperature=0)
 
-cot_prompt = PromptTemplate(
-    input_variables=["history","question", "chunks", "external_info"],
-    template="""
-Tu es un assistant pédagogique pour un cours de science politique. Tu ne dois utiliser que les informations fournies des sources internes et externes pour répondre à la question. Tu dois spécifié quand les infos proviennent des documents internes ou de la recherche externe.
+tools = [
+    internal_document_search,
+    external_search_tool
+]
 
-Historique de la conversation :
-{history}
-
-Question : {question}
-
-Documents internes pertinents :
-{chunks}
-
-Informations externes (si certains termes sont complexes ou absents) :
-{external_info}
-
-Raisonnement étape par étape :
-1. Analyse la question.
-2. Identifie les termes ou concepts manquants ou complexes.
-3. Explique chaque terme complexe en utilisant les infos internes et externes.
-4. Génère toujours une réponse complète et pédagogique en faisant une explication avec les infos internes.
-5. Génère toujours une réponse complète et pédagogique en faisant une explication avec les infos externes.
-6. Synthétise les deux explications pour fournir une réponse finale claire et concise.
-7. Vérifie la cohérence de ta réponse.
-8. Indique la provenance des informations utilisées (internes ou externes).
-
-Réponse finale :
-"""
+agent = initialize_agent(
+    tools=tools,
+    llm=llm,
+    agent=AgentType.OPENAI_FUNCTIONS,
+    verbose=True,
+    agent_kwargs={
+        "system_message": SystemMessage(content=SYSTEM_PROMPT)
+    }
 )
-
-cot_chain = LLMChain(llm=llm, prompt=cot_prompt)
 
 def format_history(history):
     return "\n".join(
         [f"{m.role.upper()}: {m.content}" for m in history]
     )
 
-def answer_question(question: str, history: list, k: int = 5):
-    relevant_chunks = retrieve_relevant_chunks(question, k)
-    chunks_text = format_chunks(relevant_chunks)
-    external_info = external_search(question)
-
+def answer_question(question: str, history: list):
     history_text = format_history(history)
 
-    response = cot_chain.invoke({
-        "history": history_text,
-        "question": question,
-        "chunks": chunks_text,
-        "external_info": external_info
+    response = agent.invoke({
+        "input": f"""
+Historique de la conversation :
+{history_text}
+
+Question utilisateur :
+{question}
+"""
     })
 
-    return response["text"]
+    return response["output"]
+
+
 
 
 # -------------------
