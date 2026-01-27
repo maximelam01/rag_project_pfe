@@ -2,7 +2,9 @@
 
 Cet assistant est une plateforme d'apprentissage interactive conçue pour accompagner les étudiants en science politique. Grâce à une architecture **RAG (Retrieval-Augmented Generation)** et un système d'**Agents autonomes**, l'application permet d'interroger des supports de cours spécifiques et de générer des QCM personnalisés.
 
+## 🔗 Lien 
 
+https://rag-project-pfe-162391846946.europe-west1.run.app/
 
 ## 🚀 Fonctionnalités Clés
 
