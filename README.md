@@ -53,12 +53,12 @@ PG_USER=votre_user
 PG_PASSWORD=votre_mdp
 PG_DB=votre_base
 ```
-3. Lancement
-Bash
+### 3. Lancement
+```Bash
 
 # Installation des dépendances
 pip install -r requirements.txt
-
+```
 # Lancement du serveur
 uvicorn main:app --reload
 📋 Logique de Dialogue (Chain of Thought)
@@ -85,7 +85,7 @@ Style pédagogique : Clair, structuré et sans suppositions hors-contexte.
 
 📝 Format des Données (QCM)
 Les QCM générés suivent une structure JSON stricte, permettant une intégration dynamique côté Frontend :
-
+```
 JSON
 
 {
@@ -99,5 +99,6 @@ JSON
     }
   ]
 }
+```
 👨‍💻 Auteur
 [Maxime LAMBERT] - Projet de Fin d'Études (2026)
