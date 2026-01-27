@@ -58,10 +58,11 @@ PG_DB=votre_base
 
 # Installation des dépendances
 pip install -r requirements.txt
-```
+
 # Lancement du serveur
 uvicorn main:app --reload
-📋 Logique de Dialogue (Chain of Thought)
+```
+## 📋 Logique de Dialogue (Chain of Thought)
 Le système garantit la traçabilité des décisions et la pertinence des recherches. Voici un exemple de comportement lors d'une question de suivi :
 
 Input Utilisateur : "Dis-m'en plus sur ça."
@@ -72,7 +73,7 @@ Action : Appel de l'outil internal_document_search avec la requête reformulée.
 
 Synthèse : Analyse des chunks récupérés. Si l'info est absente, l'agent déclenche le protocole de demande d'accès à Internet.
 
-🧠 Protocole du Prompt Système
+## 🧠 Protocole du Prompt Système
 L'agent est piloté par un protocole strict défini dans le SYSTEM_PROMPT :
 
 Priorité absolue au document sélectionné (course_name).
@@ -83,7 +84,7 @@ Honnêteté intellectuelle : L'IA indique clairement l'origine de l'information 
 
 Style pédagogique : Clair, structuré et sans suppositions hors-contexte.
 
-📝 Format des Données (QCM)
+## 📝 Format des Données (QCM)
 Les QCM générés suivent une structure JSON stricte, permettant une intégration dynamique côté Frontend :
 ```
 JSON
@@ -100,5 +101,5 @@ JSON
   ]
 }
 ```
-👨‍💻 Auteur
+## 👨‍💻 Auteur
 [Maxime LAMBERT] - Projet de Fin d'Études (2026)
