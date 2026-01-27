@@ -13,3 +13,4 @@ PyPDF2
 google-search-results
 fastapi
 uvicorn[standard]
+python-multipart

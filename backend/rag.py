@@ -4,6 +4,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+from fastapi import UploadFile, File
+from fastapi import Form
+from fastapi.responses import JSONResponse
+import json
+
+import re
+import logging
+import sys
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -16,9 +24,25 @@ from langchain.tools import tool
 from langchain.schema import Document
 from langchain.agents import initialize_agent, AgentType
 from langchain.schema import SystemMessage
+from langchain.schema import HumanMessage
 
+from sqlalchemy import create_engine, text
 
 load_dotenv()
+logging.basicConfig(
+    level=logging.INFO,
+    stream=sys.stdout,
+    format="%(asctime)s %(levelname)s %(message)s"
+)
+
+# Logger principal
+logger = logging.getLogger("uvicorn")  # ou "uvicorn.error" pour tout
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+logger.propagate = False
 
 # -------------------
 # Configuration DB
@@ -30,8 +54,11 @@ PG_CONNECTION_STRING = (
     f"/{os.getenv('PG_DB')}"
 )
 
-TABLE_NAME = "documents"
+engine = create_engine(PG_CONNECTION_STRING)
 
+TABLE_NAME = "langchain_pg_embedding"
+CURRENT_SELECTED_DOC = None
+CURRENT_USER_QUESTION = None
 
 class ChatMessage(BaseModel):
     role: str  # "user" | "assistant"
@@ -40,7 +67,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     question: str
     history: list[ChatMessage]
-
+    document: str | None = None
 
 # -------------------
 # Embeddings et vectordb
@@ -49,23 +76,37 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 vectordb = PGVector(
     connection_string=PG_CONNECTION_STRING,
     embedding_function=embeddings,
-    collection_name=TABLE_NAME
+    collection_name="documents" # Correspond au nom dans langchain_pg_collection
 )
 
 # -------------------
 # Recherche interne
 # -------------------
-def retrieve_relevant_chunks(question: str, k: int = 5):
-    docs = vectordb.similarity_search(query=question, k=k*2)
-    unique_docs = []
-    seen_texts = set()
-    for doc in docs:
-        if doc.page_content not in seen_texts:
-            unique_docs.append(doc)
-            seen_texts.add(doc.page_content)
-        if len(unique_docs) >= k:
-            break
-    return unique_docs
+def retrieve_relevant_chunks(question: str, k: int = 5, document_name: str | None = None):
+    filter_metadata = None
+    # On utilise "source" car c'est la clé qu'on a insérée dans le Notebook
+    if document_name and document_name.strip() != "":
+        filter_metadata = {"source": document_name}
+
+    logger.info("="*50)
+    logger.info("--- 🔍 DÉBUT RECHERCHE VECTORIELLE ---")
+    logger.info(f"Question envoyée à PGVector: '{question}'")
+    logger.info(f"Filtre appliqué: {filter_metadata}")
+
+    docs = vectordb.similarity_search(
+        query=question,
+        k=k,
+        filter=filter_metadata
+    )
+
+    logger.info(f"✅ [VECTOR SEARCH] {len(docs)} chunks récupérés.")
+    for i, doc in enumerate(docs):
+        # On affiche les 100 premiers caractères de chaque chunk pour le suivi
+        content_snippet = doc.page_content.replace('\n', ' ')[:100]
+        logger.info(f"   [Chunk {i+1}] Source: {doc.metadata.get('source')} | Contenu: {content_snippet}...")
+    logger.info("="*50)
+
+    return docs
 
 def format_chunks(chunks):
     return "\n\n".join([doc.page_content for doc in chunks])
@@ -82,16 +123,28 @@ def external_search_tool(query: str) -> str:
     À utiliser uniquement si les informations ne sont pas disponibles
     dans les documents internes ou si des notions sont complexes.
     """
-    return serp.run(query)
+
+    logger.info(f"🛠️ Tool utilisé avec la question forcée : {query}")
+    logger.info(f"🌐 [TOOL: EXTERNAL] Recherche web pour : '{query}'")
+    
+    res = serp.run(query)
+    logger.info(f"✅ [TOOL: EXTERNAL] Résultat récupéré (reponse: {res} ")
+    return res
 
 @tool
 def internal_document_search(query: str) -> str:
     """
-    Recherche des informations pertinentes dans les documents internes
-    stockés dans la base vectorielle.
+    Recherche des informations pertinentes dans les cours de science politique.
+    Utilise cet outil pour répondre aux questions sur le contenu des cours.
     """
-    docs = retrieve_relevant_chunks(query)
-    return format_chunks(docs)
+
+    
+
+    logger.info(f"🛠️ [TOOL: INTERNAL] Requête finale choisie : '{query}'")
+    logger.info(f"📍 [TOOL: INTERNAL] Contexte Document: {CURRENT_SELECTED_DOC}")
+
+    docs = retrieve_relevant_chunks(query, document_name=CURRENT_SELECTED_DOC)
+    return "\n\n".join([doc.page_content for doc in docs])
 
 # -------------------
 # CoT + synthèse
@@ -99,24 +152,36 @@ def internal_document_search(query: str) -> str:
 
 
 SYSTEM_PROMPT = """
-Tu es un assistant pédagogique pour un cours de science politique.
+Tu es un assistant pédagogique strict pour un cours de science politique ({course_name}). (mentionne ce nom si l'utilisateur pose des questions sur l'identité du cours).
 
-Tu as accès à deux sources :
-- Documents internes (via un outil de recherche interne)
-- Recherche Internet (via un outil externe)
+PROTOCOLE DE RÉPONSE OBLIGATOIRE :
+1. Tu dois TOUJOURS commencer par utiliser l'outil 'internal_document_search' pour chercher l'information, même si la question semble générale ou factuelle.
+2. Si, et seulement si, l'outil interne ne renvoie pas l'information (ou si tu as un doute sérieux), tu dois répondre : 
+   "Je suis désolé, je ne trouve pas cette information dans le cours '{course_name}'. Souhaitez-vous que je fasse une recherche sur Internet pour vous ?"
+3. INTERDICTION : Tu ne dois JAMAIS utiliser l'outil 'external_search_tool' de ta propre initiative.
+4. Tu ne peux utiliser 'external_search_tool' QUE SI l'utilisateur a explicitement répondu "Oui" ou "Cherche sur internet" à ta proposition.
 
 Règles strictes :
-- Utilise TOUJOURS les documents internes en priorité
-- Utilise la recherche Internet UNIQUEMENT si les documents internes sont insuffisants
-- Indique clairement la provenance des informations utilisées (interne / externe) et commence par dire quelle "tool" tu utilises
-- Ne fais aucune supposition sans source
+1. Si l'utilisateur pose une question globale ("De quoi parle ce cours ?", "Fais un résumé"), utilise l'outil 'internal_document_search' avec une requête large comme "résumé thèmes principaux" pour obtenir du contexte.
+2. Si un document est sélectionné, RESTE strictement dans le cadre de ce document.
+3. Si tu ne trouves pas la réponse dans le document interne, dis-le clairement avant de proposer une recherche Internet.
+4. Ne réponds jamais à une question qui n'a aucun rapport avec le cours sélectionné.
+5. Indique clairement la provenance des informations utilisées (interne / externe) et commence par dire quelle "tool" tu utilises
+6. Ne fais aucune supposition sans source
+
+RÈGLE DE REFORMULATION :
+Avant d'utiliser un outil (interne ou externe), tu dois transformer la question de l'utilisateur en une requête complète et autonome, en utilisant l'historique de la conversation.
+Exemple : 
+- User : "Parle moi de la démocratie." 
+- Agent : (Cherche "démocratie")
+- User : "Donne moi des exemples." 
+- Agent : (Cherche "exemples de démocratie science politique") et non juste "exemples".
 
 Style :
 - Clair
 - Structuré
 - Pédagogique
 """
-
 
 
 llm = ChatOpenAI(model_name="gpt-4", temperature=0)
@@ -131,9 +196,6 @@ agent = initialize_agent(
     llm=llm,
     agent=AgentType.OPENAI_FUNCTIONS,
     verbose=True,
-    agent_kwargs={
-        "system_message": SystemMessage(content=SYSTEM_PROMPT)
-    }
 )
 
 def format_history(history):
@@ -143,9 +205,14 @@ def format_history(history):
 
 def answer_question(question: str, history: list):
     history_text = format_history(history)
+    
+    dynamic_system_prompt = SYSTEM_PROMPT.format(course_name=CURRENT_SELECTED_DOC)
 
     response = agent.invoke({
         "input": f"""
+SYSTEM_INSTRUCTIONS: {dynamic_system_prompt}
+
+CONTEXTE ACTUEL : Tu travailles sur le document nommé : "{CURRENT_SELECTED_DOC}"
 Historique de la conversation :
 {history_text}
 
@@ -157,7 +224,35 @@ Question utilisateur :
     return response["output"]
 
 
+def normalize_llm_json(text: str) -> str:
+    # Supprimer balises ```json ``` si présentes
+    text = re.sub(r"```json|```", "", text)
 
+    # Remplacer guillemets typographiques
+    text = text.replace("“", "\"").replace("”", "\"")
+
+    # Supprimer virgules finales avant } ou ]
+    text = re.sub(r",\s*([}\]])", r"\1", text)
+
+    return text.strip()
+
+
+def validate_qcm(qcm: dict):
+    if "title" not in qcm or "questions" not in qcm:
+        raise ValueError("Structure QCM invalide")
+
+    if not isinstance(qcm["questions"], list) or len(qcm["questions"]) == 0:
+        raise ValueError("Aucune question dans le QCM")
+
+    for q in qcm["questions"]:
+        for key in ["question", "choices", "correct", "explanation"]:
+            if key not in q:
+                raise ValueError(f"Champ manquant : {key}")
+
+        if not isinstance(q["choices"], list):
+            raise ValueError("choices doit être une liste")
+
+        q["correct"] = int(q["correct"])  # sécurité
 
 # -------------------
 # FastAPI
@@ -181,11 +276,135 @@ async def serve_index():
 class Question(BaseModel):
     question: str
 
+
+@app.get("/documents")
+async def list_documents():
+    """
+    Récupère la liste des documents avec un cast explicite en JSONB
+    """
+    # On ajoute ::jsonb pour régler le problème d'opérateur
+    query = text("""
+        SELECT DISTINCT cmetadata->>'source' AS source_name
+        FROM langchain_pg_embedding
+        WHERE cmetadata IS NOT NULL 
+          AND cmetadata::jsonb ? 'source'
+        ORDER BY source_name;
+    """)
+    try:
+        with engine.connect() as conn:
+            results = conn.execute(query).fetchall()
+            documents = [row[0] for row in results if row[0] is not None]
+            logger.info(f"✅ Documents récupérés : {documents}")
+            return {"documents": documents}
+    except Exception as e:
+        logger.error(f"❌ Erreur SQL dans list_documents : {e}")
+        return JSONResponse(
+            status_code=500, 
+            content={"error": "Erreur SQL", "details": str(e)}
+        )
+
+
 @app.post("/ask")
 async def ask_question(req: ChatRequest):
+    global CURRENT_SELECTED_DOC, CURRENT_USER_QUESTION
+    
+    logger.info("\n" + "🚀"*20)
+    logger.info(f"RÉCEPTION REQUÊTE /ASK")
+    logger.info(f"Utilisateur demande: '{req.question}'")
+    logger.info(f"Document sélectionné: '{req.document}'")
+
+    if not req.document:
+        return {"answer": "⚠️ Veuillez sélectionner un cours."}
+
+    CURRENT_SELECTED_DOC = req.document 
+    CURRENT_USER_QUESTION = req.question  
+    
     answer = answer_question(
         question=req.question,
         history=req.history
     )
+
+    logger.info(f"📤 RÉPONSE FINALE ENVOYÉE : {answer[:100]}...")
+    logger.info("🚀"*20 + "\n")
+
     return {"answer": answer}
 
+@app.post("/generate-qcm")
+async def generate_qcm(question: str = Form(...), document: str = Form(None)):
+
+    logger.info("📝 [QCM] Demande de génération reçue")
+    logger.info(f"📝 [QCM] Sujet: '{question}' | Source: '{document}'")
+    
+    try:
+        # 1️⃣ Récupérer les documents internes
+        # Utilisation du filtre aussi pour le QCM
+        docs = retrieve_relevant_chunks(question, k=5, document_name=document)
+        context_text = "\n\n".join([doc.page_content for doc in docs])
+
+        if not context_text.strip():
+            return JSONResponse(
+                status_code=404, 
+                content={"error": "Aucun contenu trouvé pour générer ce QCM."}
+            )
+
+        # 2️⃣ Prompt
+        QCM_PROMPT = """
+Tu es un enseignant expert en science politique. 
+L'élève souhaite un QCM spécifique sur le sujet suivant : "{user_query}"
+
+Utilise les documents de référence fournis ci-dessous pour créer les questions. 
+
+Réponds EXCLUSIVEMENT par du JSON valide.
+
+Format attendu :
+{{
+  "title": "Titre du QCM",
+  "questions": [
+    {{
+      "question": "Texte de la question",
+      "choices": ["Choix 0", "Choix 1", "Choix 2", "Choix 3"],
+      "correct": 0,
+      "explanation": "Pourquoi c'est la bonne réponse"
+    }}
+  ]
+}}
+
+Documents de référence :
+{document}
+"""
+        # Injection des variables
+        prompt = QCM_PROMPT.format(user_query=question, document=context_text)  
+        # 3️⃣ Appel LLM
+        response = llm.invoke([HumanMessage(content=prompt)])
+        raw_content = response.content
+        logger.info("Raw response du LLM : %s", raw_content)
+
+        # 4️⃣ Extraction robuste du JSON par Regex
+        # Cherche le premier '{' et le dernier '}' pour ignorer le texte autour
+        match = re.search(r"(\{.*\})", raw_content, re.DOTALL)
+        
+        if not match:
+            return JSONResponse(
+                status_code=500, 
+                content={"error": "Le modèle n'a pas généré un format JSON valide", "raw": raw_content}
+            )
+
+        clean_content = normalize_llm_json(match.group(1))
+
+        try:
+            qcm_json = json.loads(clean_content)
+            validate_qcm(qcm_json)
+            return JSONResponse(content=qcm_json)
+        except json.JSONDecodeError as e:
+            logger.error("Erreur parsing : %s", clean_content)
+            return JSONResponse(
+                status_code=500, 
+                content={"error": "Erreur de décodage JSON", "details": str(e)}
+            )
+
+    except Exception as e:
+        logger.exception("Erreur interne generate-qcm")
+        return JSONResponse(
+            status_code=500, 
+            content={"error": "Erreur serveur interne", "details": str(e)}
+        )

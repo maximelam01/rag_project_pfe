@@ -9,7 +9,15 @@
 
 <div class="app">
     <h1>Agent pour l'enseignement-Sciences Politiques</h1>
-    <h2>Maxime LAMBERT & Mathias ROBERT</h2>
+    <h2>PFE</h2>
+    <div class="top-bar">
+        <select id="document-select">
+            <option value="">📚 Tous les cours</option>
+        </select>
+        <p id="selected-course" class="selected-course">
+        📘 Cours sélectionné : <strong>Aucun</strong>
+        </p>
+    </div>
 
     <div id="chat" class="chat-box"></div>
 
@@ -17,6 +25,14 @@
         <textarea id="question" placeholder="Pose ta question..."></textarea>
         <button onclick="askQuestion()">Envoyer</button>
     </div>
+    <div id="progress-container" class="hidden">
+        <p id="progress-text">Génération de votre QCM par l'IA...</p>
+        <div class="progress-bar">
+            <div class="progress-fill"></div>
+        </div>
+    </div>
+
+    <div id="qcm-container" class="qcm hidden"></div>
 </div>
 
 <script src="/static/script.js"></script>
