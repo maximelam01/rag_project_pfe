@@ -1,61 +1,98 @@
-# rag_project
-RAG application deploy on the cloud
-## link of the application : https://rag-project-162391846946.europe-west1.run.app/
+🎓 Assistant Pédagogique Intelligent - Science Politique
+Cet assistant est une plateforme d'apprentissage interactive conçue pour accompagner les étudiants en science politique. Grâce à une architecture RAG (Retrieval-Augmented Generation) et un système d'Agents autonomes, l'application permet d'interroger des supports de cours spécifiques et de générer des QCM personnalisés.
 
+🚀 Fonctionnalités Clés
+RAG Sécurisé : L'assistant priorise systématiquement les documents de cours chargés en base de données vectorielle.
 
-This project is an **educational conversational agent** using **RAG (Retrieval-Augmented Generation)** built with **FastAPI**, **LangChain**, and **OpenAI**. It allows users to ask questions related to political science and get detailed, step-by-step answers from internal documents and external search results. It's an agent who choose which tool use (interal/extenal info)
+Agent de Reformulation : Capacité à comprendre les questions de suivi (ex: "Dis-m'en plus", "Donne-moi un exemple") en utilisant l'historique de la conversation pour générer des requêtes autonomes.
 
----
+Recherche Hybride : Bascule intelligente vers Internet (SerpAPI) uniquement après validation de l'utilisateur si l'information est absente du cours.
 
-## 🚀 Features
+Générateur de QCM : Création automatique de questionnaires au format JSON basés sur le contexte spécifique du document sélectionné.
 
-- Conversational agent interface
-- Retrieval of relevant internal documents (vector search)
-- Optional external search for missing information
-- Step-by-step reasoning for explanations
-- Maintains a **conversation history** (up to 20 messages)
-- Deployed on **GCP Cloud Run** with a public URL
+Audit Log Complet : Suivi en temps réel des processus de recherche (Vector search, Tool usage, Query translation).
 
----
+🛠️ Stack Technique
+Backend : FastAPI (Python 3.10+)
 
-## 📦 Tech Stack
+IA & Orchestration : LangChain, OpenAI GPT-4
 
-- **Backend**: Python, FastAPI, LangChain, OpenAI API
-- **Frontend**: HTML, CSS, JavaScript
-- **Database**: PostgreSQL (for document storage and vector search)
-- **Containerization**: Docker
-- **Cloud Deployment**: Google Cloud Run
+Base de Données Vectorielle : PostgreSQL avec l'extension PGVector
 
----
+Embeddings : OpenAI text-embedding-3-small
 
-Project: Educational Agent for Political Science Course (RAG + CoT Reasoning)
-Our project aims to develop an intelligent agent designed to assist students in
-understanding a political science course by answering questions and explaining
-complex concepts. The agent will combine an internal knowledge base (course
-documents) with external information retrieved from the internet to provide reliable,
-complete, and pedagogical explanations.
-The system is built around a RAG (Retrieval Augmented Generation) pipeline:
-1. The agent first queries the course documents to locate the most relevant
-sections.
-2. It extracts the necessary information to generate an accurate answer.
-3. If the question includes complex terms or if the internal knowledge base lacks
-certain definitions, the agent performs external internet searches to retrieve
-valid and up-to-date explanations.
-To ensure clear and controlled reasoning, we will explicitly integrate Chain of Thought
-(CoT). The model will follow structured steps: question analysis, internal retrieval,
-identification of missing knowledge, targeted external search, synthesis of all
-information, and coherence self-verification.
-The agent will be accessible through a Streamlit interface, where users can submit
-questions and optionally view the reasoning steps used to produce the answer. The goal
-is to create a transparent, reliable, and educational tool adapted to learning concepts
-that are often abstract in political science.
-Main Features
-• Search and retrieval from the course knowledge base (RAG).
-• Automatic detection of complex terms and external search for definitions.
-• Explicit reasoning through Chain of Thought (CoT).
-• Clear and beginner-friendly explanations.
-• Light self-correction to reduce errors.
-• User-friendly Streamlit interface.
-Project Members
-• Maxime LAMBERT
-• Mathias ROBERT
+Recherche Web : SerpAPI
+
+Frontend : HTML5 / CSS3 / JavaScript (Vanilla)
+
+🏗️ Architecture du Système
+Le projet repose sur un Agent de type "OpenAI Functions" qui arbitre entre deux outils principaux via un processus de réflexion (Chain of Thought) :
+
+internal_document_search : Interroge la base PostgreSQL pour extraire les paragraphes les plus pertinents via une recherche par similarité cosinus sur les embeddings.
+
+external_search_tool : Effectue une recherche Google via SerpAPI en cas de lacune avérée dans le corpus interne, après consentement de l'utilisateur.
+
+⚙️ Installation et Configuration
+1. Pré-requis
+PostgreSQL 15+ avec l'extension vector installée.
+
+Clé API OpenAI et Clé API SerpAPI.
+
+2. Configuration de l'environnement
+Créez un fichier .env à la racine du projet :
+
+Extrait de code
+
+OPENAI_API_KEY=votre_cle_openai
+SERPAPI_API_KEY=votre_cle_serpapi
+PG_HOST=localhost
+PG_PORT=5432
+PG_USER=votre_user
+PG_PASSWORD=votre_mdp
+PG_DB=votre_base
+3. Lancement
+Bash
+
+# Installation des dépendances
+pip install -r requirements.txt
+
+# Lancement du serveur
+uvicorn main:app --reload
+📋 Logique de Dialogue (Chain of Thought)
+Le système garantit la traçabilité des décisions. Voici un exemple de comportement lors d'une question de suivi :
+
+Input : "Dis-m'en plus"
+
+Reformulation : L'Agent analyse l'historique et transforme l'input en : "Détails sur les fonctions du pouvoir législatif".
+
+Action : Appel de l'outil internal_document_search.
+
+Synthèse : Si les chunks sont trouvés, réponse pédagogique. Sinon, proposition de recherche externe.
+
+🧠 Structure du Prompt Système
+L'agent est piloté par un protocole strict défini dans le SYSTEM_PROMPT :
+
+Priorité absolue au document sélectionné (course_name).
+
+Interdiction de recherche internet autonome (consentement utilisateur obligatoire).
+
+Style pédagogique : Clair, structuré et sans suppositions hors-contexte.
+
+📝 Format des Données (QCM)
+Les QCM générés suivent une structure JSON stricte validée par Regex et Pydantic :
+
+JSON
+
+{
+  "title": "Titre du QCM",
+  "questions": [
+    {
+      "question": "Texte de la question",
+      "choices": ["A", "B", "C", "D"],
+      "correct": 0,
+      "explanation": "Explication pédagogique"
+    }
+  ]
+}
+👨‍💻 Auteur
+[Maxime LAMBERT] Projet de Fin d'Études (2026)
