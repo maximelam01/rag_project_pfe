@@ -52,6 +52,7 @@ PG_PORT=5432
 PG_USER=votre_user
 PG_PASSWORD=votre_mdp
 PG_DB=votre_base
+```
 3. Lancement
 Bash
 
