@@ -1,12 +1,13 @@
 :root {
     --bg-dark: #0f172a;
     --sidebar-bg: #1e293b;
-    --accent-color: #38bdf8;
-    --accent-hover: #0ea5e9;
+    /* Rouge HEIP Officiel */
+    --accent-color: #96151b; 
+    --accent-hover: #7a1115;
     --text-main: #f1f5f9;
     --text-dim: #94a3b8;
     --glass: rgba(255, 255, 255, 0.03);
-    --user-msg: #334155;
+    --user-msg: #96151b;
     --ai-msg: #1e293b;
 }
 
@@ -109,12 +110,13 @@ select {
     border-radius: 15px;
     line-height: 1.6;
     animation: fadeIn 0.3s ease;
+    word-wrap: break-word;
 }
 
 .message.user {
     align-self: flex-end;
     background: var(--accent-color);
-    color: #000;
+    color: #fff;
     font-weight: 500;
     border-bottom-right-radius: 2px;
 }
@@ -162,82 +164,53 @@ textarea {
     height: 40px;
     border-radius: 8px;
     cursor: pointer;
-    color: black;
+    color: white;
 }
 
 #send-btn:hover { background: var(--accent-hover); transform: scale(1.05); }
+
+/* Markdown & Assistant Content Style */
+.message h1, .message h2, .message h3 {
+    font-size: 1.1rem;
+    margin: 10px 0;
+    color: var(--accent-color); /* ROUGE HEIP */
+}
+
+.message strong {
+    color: var(--accent-color); /* ROUGE HEIP */
+}
+
+.message.user strong {
+    color: #fff;
+    text-decoration: underline;
+}
+
+.message ul, .message ol {
+    margin-left: 20px;
+    margin-bottom: 10px;
+}
+
+.message li { margin-bottom: 5px; }
 
 /* QCM Style */
 .qcm-overlay {
     position: absolute;
     top: 10%; left: 10%; right: 10%; bottom: 10%;
     background: #1e293b;
-    border: 1px solid var(--accent-color);
+    border: 2px solid var(--accent-color);
     border-radius: 20px;
     padding: 2rem;
     z-index: 100;
     overflow-y: auto;
-    box-shadow: 0 0 50px rgba(0,0,0,0.5);
+    box-shadow: 0 0 50px rgba(0,0,0,0.8);
 }
 
 .qcm-question { margin-bottom: 2rem; background: rgba(255,255,255,0.03); padding: 1.5rem; border-radius: 12px; }
 
-/* Animations */
-@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-.hidden { display: none !important; }
-
-/* Spinner */
-.spinner {
-    width: 30px; height: 30px;
-    border: 3px solid rgba(56, 189, 248, 0.3);
-    border-top-color: var(--accent-color);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 10px;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* Style pour les messages d'erreur dans le chat */
-.message.error-message {
-    border: 1px solid #ef4444;
-    background: rgba(239, 68, 68, 0.1) !important;
-    color: #fca5a5 !important;
-    align-self: center; /* Centre les erreurs pour qu'elles se voient bien */
-    text-align: center;
-    max-width: 90%;
-}
-
-/* Bouton de fermeture du QCM plus visible */
-.close-qcm {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    background: transparent;
-    border: none;
-    color: white;
-    font-size: 2rem;
-    cursor: pointer;
-    line-height: 1;
-}
-
-.close-qcm:hover {
-    color: #ef4444;
-}
-
-/* Animation douce pour l'apparition du feedback QCM */
-.qcm-feedback {
-    animation: fadeIn 0.4s ease;
-    padding: 10px;
-    border-radius: 8px;
-    background: rgba(0,0,0,0.2);
-    margin-top: 10px;
-}
-
+/* Status Indicator */
 .dot {
-    height: 8px;
-    width: 8px;
-    background-color: #22c55e; /* Vert */
+    height: 8px; width: 8px;
+    background-color: #22c55e;
     border-radius: 50%;
     display: inline-block;
     margin-right: 8px;
@@ -249,4 +222,33 @@ textarea {
     0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
     70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
     100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+/* Spinner & Animations */
+.spinner {
+    width: 30px; height: 30px;
+    border: 3px solid rgba(150, 21, 27, 0.2);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 10px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.hidden { display: none !important; }
+
+
+/* Animation de battement pour le focus document */
+@keyframes heartBeat {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+    100% { transform: scale(1); }
+}
+
+.pulse-animation {
+    display: inline-block;
+    animation: heartBeat 0.8s ease-in-out;
+    color: var(--accent-color) !important;
 }

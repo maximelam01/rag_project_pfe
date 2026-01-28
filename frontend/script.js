@@ -27,9 +27,17 @@ async function loadDocuments() {
 
 function addMessage(role, content, isError = false) {
     const div = document.createElement("div");
-    // Si c'est une erreur, on ajoute une classe CSS spéciale
     div.className = `message ${role} ${isError ? 'error-message' : ''}`;
-    div.innerHTML = content.replace(/\n/g, '<br>');
+    
+    // Si c'est l'assistant, on transforme le Markdown en HTML
+    // Si c'est l'utilisateur, on reste sur du texte simple (ou markdown aussi si tu veux)
+    if (role === "assistant" && !content.includes("spinner")) {
+        div.innerHTML = marked.parse(content);
+    } else {
+        // Pour le spinner ou le texte utilisateur simple
+        div.innerHTML = content.replace(/\n/g, '<br>');
+    }
+
     chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
     return div;
@@ -139,11 +147,21 @@ input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey)
 documentSelect.addEventListener("change", () => {
     const selected = documentSelect.value;
     const info = document.getElementById("selected-course");
+    
     if (selected) {
+        // On met à jour le contenu
         info.innerHTML = `<i class="fas fa-file-alt"></i> Focus : <strong>${selected}</strong>`;
-        info.style.color = "#38bdf8";
+        
+        // On applique la couleur HEIP
+        info.style.color = "var(--accent-color)";
+        
+        // On ajoute l'animation de battement
+        info.classList.remove("pulse-animation");
+        void info.offsetWidth; // "Magic trick" pour redémarrer l'animation CSS
+        info.classList.add("pulse-animation");
     } else {
         info.textContent = "Aucun document chargé";
         info.style.color = "";
+        info.classList.remove("pulse-animation");
     }
 });
