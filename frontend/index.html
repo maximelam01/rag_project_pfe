@@ -23,6 +23,11 @@
                 <button id="btn-global" class="mode-btn" onclick="setMode('GLOBAL')">Global</button>
                 <button id="btn-precis" class="mode-btn" onclick="setMode('PRECIS')">Précis</button>
             </div>
+            <div class="revision-zone" style="margin-top: 1.5rem;">
+                <button id="btn-revision" class="mode-btn" style="width: 100%; background: #0f172a; border: 1px dashed var(--accent-color);" onclick="generateRevision()">
+                    <i class="fas fa-file-pdf"></i> Générer une fiche
+                </button>
+            </div>
 
             <div id="document-list-container" class="hidden" >
                 <label><i class="fas fa-book"></i> Supports de cours</label>

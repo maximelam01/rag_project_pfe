@@ -403,3 +403,102 @@ textarea {
     color: var(--text-dim);
     opacity: 0.6;
 }
+
+/* --- Styles pour la fonctionnalité Fiche de Révision --- */
+
+.revision-zone {
+    margin-top: 1rem;
+    padding: 0 5px;
+}
+
+#btn-revision {
+    width: 100%;
+    background: transparent;
+    border: 1px dashed var(--accent-color);
+    color: var(--text-main);
+    padding: 12px;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+#btn-revision:hover {
+    background: rgba(150, 21, 27, 0.1);
+    border-style: solid;
+    transform: translateY(-2px);
+}
+
+#btn-revision:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    border-color: var(--text-dim);
+}
+
+/* --- Amélioration des messages d'erreur --- */
+
+.error-message {
+    border: 1px solid #ef4444 !important;
+    background: rgba(239, 68, 68, 0.1) !important;
+    color: #fca5a5 !important;
+}
+
+/* --- Animation pour l'icône de chargement dans le bouton --- */
+.fa-spinner {
+    animation: spin 1s linear infinite;
+}
+
+/* Ajustement pour le badge PFE pour qu'il reste bien en bas */
+.pfe-badge {
+    margin-top: 2rem; /* Garantit un espace minimal au-dessus du badge */
+}
+
+/* Responsive : s'assurer que la zone de scroll s'adapte avec le nouveau bouton */
+.document-cards-grid {
+    max-height: 350px; /* On réduit un peu la hauteur max pour laisser de la place au bouton PDF */
+}
+
+/* --- Style pour les cartes de téléchargement/aperçu PDF --- */
+
+.download-link-card {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Centre le contenu */
+    gap: 10px;
+    background: rgba(150, 21, 27, 0.08); /* Fond rouge très léger */
+    border: 1px solid var(--accent-color);
+    padding: 12px;
+    border-radius: 10px;
+    margin-top: 12px;
+    text-decoration: none;
+    color: white !important;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.download-link-card i {
+    font-size: 1.1rem;
+    color: var(--accent-color);
+}
+
+.download-link-card:hover {
+    background: var(--accent-color);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(150, 21, 27, 0.3);
+}
+
+.download-link-card:hover i {
+    color: white; /* L'icône devient blanche au survol */
+}
+
+/* Conteneur pour mettre les deux boutons côte à côte */
+.pdf-action-container {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+}

@@ -232,3 +232,53 @@ document.getElementById('card-search')?.addEventListener('input', function(e) {
         card.style.display = text.includes(term) ? 'flex' : 'none';
     });
 });
+
+async function generateRevision() {
+    const finalDoc = selectedDoc;
+    
+    if (!finalDoc || finalDoc === 'GLOBAL') {
+        addMessage("assistant", "⚠️ **Action requise** : Veuillez sélectionner un cours spécifique pour générer une fiche.", true);
+        return;
+    }
+
+    const btn = document.getElementById("btn-revision");
+    btn.disabled = true;
+    const loadingMsg = addMessage("assistant", "<div class='spinner'></div><p>Génération de votre fiche de révision personnalisée...</p>");
+
+    try {
+        const formData = new FormData();
+        const docValue = Array.isArray(finalDoc) ? finalDoc.join(",") : finalDoc;
+        formData.append("document", docValue);
+
+        const res = await fetch("/generate-revision-sheet", { method: "POST", body: formData });
+
+        if (res.ok) {
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            
+            loadingMsg.remove(); 
+
+            const div = document.createElement("div");
+            div.className = "message assistant";
+            div.innerHTML = `
+                <p>✅ Ta fiche de révision pour <strong>${docValue}</strong> est prête !</p>
+                <div class="pdf-action-container">
+                    <a href="${url}" target="_blank" class="download-link-card" style="flex: 1;">
+                        <i class="fas fa-eye"></i>
+                        <span>Aperçu</span>
+                    </a>
+                    <a href="${url}" download="Fiche_${docValue.replace(/\s+/g, '_')}.pdf" class="download-link-card" style="flex: 1;">
+                        <i class="fas fa-download"></i>
+                        <span>Télécharger</span>
+                    </a>
+                </div>
+            `;
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+    } catch (e) {
+        loadingMsg.innerHTML = "❌ Erreur lors de la génération.";
+    } finally {
+        btn.disabled = false;
+    }
+}

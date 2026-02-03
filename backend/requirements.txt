@@ -14,3 +14,4 @@ google-search-results
 fastapi
 uvicorn[standard]
 python-multipart
+reportlab

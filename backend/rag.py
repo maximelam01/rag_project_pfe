@@ -28,6 +28,14 @@ from langchain.schema import HumanMessage
 
 from sqlalchemy import create_engine, text
 
+# PDF generation
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+import io
+from fastapi.responses import StreamingResponse
+
 load_dotenv()
 logging.basicConfig(
     level=logging.INFO,
@@ -163,7 +171,13 @@ def internal_document_search(query: str) -> str:
 
 
 SYSTEM_PROMPT = """
-Tu es Polly AI, un assistant pédagogique strict pour un cours de science politique ({course_name}). (mentionne ce nom si l'utilisateur pose des questions sur l'identité du cours).
+Tu es Polly AI, un assistant pédagogique strict pour un cours de science politique ({course_name}). (mentionne ce nom si l'utilisateur pose des questions sur l'identité du cours). 
+
+### 🎓 POSTURE PÉDAGOGIQUE & ÉTHIQUE
+1. TON BUT : Tu es un mentor dont l'objectif est la COMPRÉHENSION. Tu dois aider l'étudiant à assimiler les concepts, pas faire le travail à sa place.
+2. INTERDICTION : Tu ne dois JAMAIS rédiger un devoir complet, une dissertation entière ou répondre à un exercice de bout en bout.
+3. MÉTHODE : Si un étudiant demande de faire un travail, décompose la tâche. Explique la méthodologie, définis les concepts clés et aiguille l'étudiant vers les parties pertinentes du cours pour qu'il puisse construire sa propre réponse.
+4. GUIDAGE : Pose des questions réflexives pour vérifier la compréhension ou suggère des pistes de réflexion.
 
 ### 🛠️ PROTOCOLE DE RÉPONSE OBLIGATOIRE
 1. Tu dois TOUJOURS commencer par utiliser l'outil 'internal_document_search' pour chercher l'information, même si la question semble générale ou factuelle.
@@ -231,14 +245,21 @@ def answer_question(question: str, history: list):
         "input": f"""
 SYSTEM_INSTRUCTIONS: {dynamic_system_prompt}
 
-CONTEXTE ACTUEL : Tu travailles sur le document nommé : "{CURRENT_SELECTED_DOC}"
-Historique de la conversation :
+### 💡 RAPPEL DE TA MISSION
+Tu es un **tuteur pédagogique**. Ton but est d'accompagner l'étudiant vers la compréhension. 
+Si la question demande de "faire à sa place", refuse poliment et propose une décomposition méthodologique.
+
+### 📚 CONTEXTE DE TRAVAIL
+Document(s) sélectionné(s) : "{CURRENT_SELECTED_DOC}"
+(Si "GLOBAL", tu as accès à toute la base de connaissance).
+
+### 💬 ÉCHANGES PRÉCÉDENTS
 {history_text}
 
-Question utilisateur :
+### ❓ QUESTION À TRAITER
 {question}
 
-RAPPEL : Réponds avec une structure Markdown soignée, des titres et des listes.
+RAPPEL : **CONSIGNE DE SORTIE :** Réponds en utilisant un Markdown riche (###, **, •).
 """
     })
 
@@ -433,3 +454,112 @@ Documents de référence :
             status_code=500, 
             content={"error": "Erreur serveur interne", "details": str(e)}
         )
+    
+@app.post("/generate-revision-sheet")
+async def generate_revision_sheet(document: str = Form(...)):
+    actual_docs = [d.strip() for d in document.split(",")] if "," in document else [document]
+    doc_name = actual_docs[0]
+    
+    # 1. Récupération et synthèse par le LLM
+    chunks = retrieve_relevant_chunks("Concepts clés, définitions importantes et résumé structuré", k=15, document_name=actual_docs)
+    context_text = format_chunks(chunks)
+
+    prompt = f"""
+    Tu es un expert en pédagogie spécialisé en Science Politique. 
+    Génère une fiche de révision académique pour le cours : "{doc_name}".
+    Utilise exclusivement les documents fournis.
+
+    ### 🎨 DIRECTIVES DE STYLE ET FORMATAGE (OBLIGATOIRE)
+    1. Titres : Utilise '###' pour les sections principales.
+    2. Mise en forme : Utilise le **gras** pour les concepts clés.
+    3. Listes : Organise avec des listes à puces (•).
+    4. Structure : Aérée avec des sauts de ligne clairs.
+    5. ⚠️ INTERDICTION (TABLEAUX) : Ne génère JAMAIS de tableaux Markdown. Si tu dois comparer des éléments ou présenter des données, utilise systématiquement des listes à puces structurées et hiérarchisées.
+    6. ⚠️ INTERDICTION : N'utilise AUCUN emoji dans cette fiche. Reste sur un ton formel et académique.
+
+    Structure attendue :
+    - Un titre majestueux
+    - Introduction (Les enjeux du cours)
+    - Concepts Clés (Définitions en gras)
+    - Synthèse thématique (Points essentiels)
+
+    Texte de référence : {context_text}
+    """
+    
+    response = llm.invoke([HumanMessage(content=prompt)])
+    content = response.content
+
+    # 2. Construction du PDF
+    buffer = io.BytesIO()
+    # Marges plus larges pour un look plus pro
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=50, leftMargin=50, topMargin=50, bottomMargin=50)
+    styles = getSampleStyleSheet()
+    
+    # Styles personnalisés
+    style_header = ParagraphStyle('Header', parent=styles['Normal'], fontSize=9, textColor=colors.grey)
+    style_title = ParagraphStyle(
+        'Title', 
+        parent=styles['Heading1'], 
+        fontSize=24, 
+        textColor=colors.HexColor("#96151b"), # Correction ici
+        spaceAfter=30, 
+        alignment=1
+    )
+    style_sub = ParagraphStyle(
+        'Sub', 
+        parent=styles['Heading2'], 
+        fontSize=14, 
+        textColor=colors.HexColor("#96151b"), # Correction ici
+        spaceBefore=15, 
+        spaceAfter=10, 
+        borderPadding=5
+    )
+    
+    elements = []
+
+    # En-tête : "Polly AI - Assistant Pédagogique"
+    elements.append(Paragraph("POLLY AI | Assistant Pédagogique Intelligent", style_header))
+    elements.append(Spacer(1, 12))
+    
+    # Transformation du contenu LLM
+    lines = content.split('\n')
+    for line in lines:
+        clean_line = line.strip()
+        if not clean_line: continue
+
+        # 1. Gestion des Titres (###)
+        if clean_line.startswith('###'):
+            # On retire les ### et on nettoie les éventuels ** que le LLM aurait mis dans le titre
+            text_content = clean_line.replace('###', '').replace('**', '').replace('*', '').strip()
+            elements.append(Paragraph(text_content, style_sub))
+        
+        # 2. Gestion des Listes (• ou -)
+        elif clean_line.startswith('•') or clean_line.startswith('-'):
+            text_content = clean_line.lstrip('•- ').strip()
+            # Transformation du gras/italique Markdown en balises PDF
+            text_content = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", text_content)
+            text_content = re.sub(r"\*(.*?)\*", r"<i>\1</i>", text_content)
+            elements.append(Paragraph(text_content, styles['Bullet']))
+            
+        # 3. Texte standard
+        else:
+            # Transformation du gras/italique Markdown en balises PDF
+            clean_line = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", clean_line)
+            clean_line = re.sub(r"\*(.*?)\*", r"<i>\1</i>", clean_line)
+            elements.append(Paragraph(clean_line, styles['Normal']))
+        
+        elements.append(Spacer(1, 8))
+
+    # Pied de page
+    elements.append(Spacer(1, 30))
+    elements.append(Paragraph("<hr/>", styles['Normal']))
+    elements.append(Paragraph(f"Généré par Polly AI - Projet de Fin d'Études 2026 - Cours : {doc_name}", style_header))
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Fiche_{doc_name.replace(' ', '_')}.pdf"}
+    )
