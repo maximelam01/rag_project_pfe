@@ -67,7 +67,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     question: str
     history: list[ChatMessage]
-    document: str | None = None
+    document: str | list[str] | None = None
 
 # -------------------
 # Embeddings et vectordb
@@ -82,11 +82,22 @@ vectordb = PGVector(
 # -------------------
 # Recherche interne
 # -------------------
-def retrieve_relevant_chunks(question: str, k: int = 5, document_name: str | None = None):
+def retrieve_relevant_chunks(question: str, k: int = 8, document_name: str | list | None = None):
     filter_metadata = None
-    # On utilise "source" car c'est la clé qu'on a insérée dans le Notebook
-    if document_name and document_name.strip() != "":
-        filter_metadata = {"source": document_name}
+
+    if document_name:
+        # Cas 1 : C'est une liste
+        if isinstance(document_name, list):
+            if len(document_name) == 1:
+                # UN SEUL document dans la liste -> on simplifie le filtre
+                filter_metadata = {"source": document_name[0]}
+            elif len(document_name) > 1:
+                # PLUSIEURS documents -> on utilise $in
+                filter_metadata = {"source": {"$in": document_name}}
+        
+        # Cas 2 : C'est une string (et pas GLOBAL)
+        elif isinstance(document_name, str) and document_name != "GLOBAL":
+            filter_metadata = {"source": document_name}
 
     logger.info("="*50)
     logger.info("--- 🔍 DÉBUT RECHERCHE VECTORIELLE ---")
@@ -209,7 +220,12 @@ def format_history(history):
 def answer_question(question: str, history: list):
     history_text = format_history(history)
     
-    dynamic_system_prompt = SYSTEM_PROMPT.format(course_name=CURRENT_SELECTED_DOC)
+    if isinstance(CURRENT_SELECTED_DOC, list):
+        doc_display = ", ".join(CURRENT_SELECTED_DOC)
+    else:
+        doc_display = CURRENT_SELECTED_DOC
+
+    dynamic_system_prompt = SYSTEM_PROMPT.format(course_name=doc_display)
 
     response = agent.invoke({
         "input": f"""
@@ -337,13 +353,17 @@ async def ask_question(req: ChatRequest):
 @app.post("/generate-qcm")
 async def generate_qcm(question: str = Form(...), document: str = Form(None)):
 
+    actual_docs = document
+    if document and "," in document:
+        actual_docs = [d.strip() for d in document.split(",")]
+
     logger.info("📝 [QCM] Demande de génération reçue")
-    logger.info(f"📝 [QCM] Sujet: '{question}' | Source: '{document}'")
+    logger.info(f"📝 [QCM] Sujet: '{question}' | Source: '{actual_docs}'")
     
     try:
         # 1️⃣ Récupérer les documents internes
         # Utilisation du filtre aussi pour le QCM
-        docs = retrieve_relevant_chunks(question, k=5, document_name=document)
+        docs = retrieve_relevant_chunks(question, k=8, document_name=actual_docs)
         context_text = "\n\n".join([doc.page_content for doc in docs])
 
         if not context_text.strip():

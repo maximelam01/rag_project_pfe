@@ -1,10 +1,12 @@
 const chat = document.getElementById("chat");
 const input = document.getElementById("question");
-const documentSelect = document.getElementById("document-select");
 const progressContainer = document.getElementById("progress-container");
 const qcmContainer = document.getElementById("qcm-container");
 
 let history = [];
+let currentMode = 'GLOBAL';
+let selectedDoc = 'GLOBAL'; // Valeur par défaut pour le mode GLOBAL
+let selectedDocsSet = new Set();
 
 // Auto-resize textarea
 input.addEventListener('input', function() {
@@ -16,25 +18,83 @@ async function loadDocuments() {
     try {
         const res = await fetch("/documents");
         const data = await res.json();
+        const container = document.getElementById("document-cards");
+        container.innerHTML = "";
+        
         data.documents.forEach(doc => {
-            const option = document.createElement("option");
-            option.value = doc;
-            option.textContent = doc;
-            documentSelect.appendChild(option);
+            const card = document.createElement("div");
+            card.title = doc;
+            card.className = "doc-card";
+            card.innerHTML = `<i class="far fa-file-alt"></i> <span>${doc}</span>`;
+            
+            card.onclick = () => {
+                if (selectedDocsSet.has(doc)) {
+                    selectedDocsSet.delete(doc);
+                    card.classList.remove("selected");
+                } else {
+                    selectedDocsSet.add(doc);
+                    card.classList.add("selected");
+                }
+                
+                // Mise à jour de la variable globale pour le backend
+                selectedDoc = Array.from(selectedDocsSet);
+                if (selectedDoc.length === 0) selectedDoc = null;
+                
+                updateInfoDisplay();
+            };
+            
+            container.appendChild(card);
         });
     } catch (e) { console.error("Erreur documents", e); }
+}
+
+function setMode(mode) {
+    currentMode = mode;
+    const btnGlobal = document.getElementById('btn-global');
+    const btnPrecis = document.getElementById('btn-precis');
+    const listContainer = document.getElementById('document-list-container');
+    const info = document.getElementById("selected-course");
+
+    // Mise à jour visuelle des boutons
+    if(btnGlobal) btnGlobal.classList.toggle('active', mode === 'GLOBAL');
+    if(btnPrecis) btnPrecis.classList.toggle('active', mode === 'PRECIS');
+    
+    if (mode === 'GLOBAL') {
+        if(listContainer) listContainer.classList.add('hidden');
+        selectedDoc = 'GLOBAL';
+    } else {
+        if(listContainer) listContainer.classList.remove('hidden');
+        // On récupère les documents sélectionnés dans le Set
+        selectedDoc = Array.from(selectedDocsSet);
+        // Si le set est vide, on met null pour afficher l'alerte
+        if (selectedDoc.length === 0) selectedDoc = null;
+    }
+    updateInfoDisplay();
+}
+
+// Fonction pour mettre à jour l'affichage du cours sélectionné
+function updateInfoDisplay() {
+    const info = document.getElementById("selected-course");
+    if (!info) return;
+
+    if (currentMode === 'GLOBAL') {
+        info.innerHTML = `<i class="fas fa-globe"></i> Mode : <strong>Recherche Globale</strong>`;
+    } else if (selectedDoc && Array.isArray(selectedDoc)) {
+        const count = selectedDoc.length;
+        info.innerHTML = `<i class="fas fa-file-alt"></i> Focus : <strong>${count} cours sélectionné(s)</strong>`;
+        info.style.color = "var(--accent-color)";
+    } else {
+        info.innerHTML = `<span style="color: #fca5a5;">⚠️ Sélectionnez au moins un cours</span>`;
+    }
 }
 
 function addMessage(role, content, isError = false) {
     const div = document.createElement("div");
     div.className = `message ${role} ${isError ? 'error-message' : ''}`;
     
-    // Si c'est l'assistant, on transforme le Markdown en HTML
-    // Si c'est l'utilisateur, on reste sur du texte simple (ou markdown aussi si tu veux)
     if (role === "assistant" && !content.includes("spinner")) {
         div.innerHTML = marked.parse(content);
     } else {
-        // Pour le spinner ou le texte utilisateur simple
         div.innerHTML = content.replace(/\n/g, '<br>');
     }
 
@@ -45,10 +105,12 @@ function addMessage(role, content, isError = false) {
 
 async function askQuestion() {
     const question = input.value.trim();
-    const selectedDocument = documentSelect.value;
+    console.log("Valeur de selectedDoc avant envoi:", selectedDoc);
+    console.log("Type de selectedDoc:", Array.isArray(selectedDoc) ? "Array" : typeof selectedDoc);
+    // On utilise selectedDoc qui est mis à jour par le mode ou le select
+    const finalDoc = selectedDoc;
     
-    // REMPLACEMENT DE L'ALERT PAR UN MESSAGE DANS LE CHAT
-    if (!selectedDocument) {
+    if (!finalDoc) {
         addMessage("assistant", "⚠️ **Action requise** : Veuillez sélectionner un cours dans la barre latérale avant de poser une question.", true);
         return;
     }
@@ -70,12 +132,17 @@ async function askQuestion() {
             res = await fetch("/ask", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ question, history, document: selectedDocument })
+                body: JSON.stringify({ 
+                    question, 
+                    history, 
+                    document: finalDoc // On envoie soit "GLOBAL" soit le nom du cours
+                })
             });
         } else {
             const formData = new FormData();
             formData.append("question", question);
-            formData.append("document", selectedDocument);
+            const docValue = Array.isArray(finalDoc) ? finalDoc.join(",") : finalDoc;
+            formData.append("document", docValue);
             res = await fetch("/generate-qcm", { method: "POST", body: formData });
         }
 
@@ -108,7 +175,6 @@ function renderQCM(qcm) {
         div.className = "qcm-question";
         div.innerHTML = `<h4>${i+1}. ${q.question}</h4>`;
         
-        // Conteneur pour le feedback spécifique à cette question
         const feedbackArea = document.createElement("div");
         feedbackArea.className = "qcm-feedback hidden";
         
@@ -119,7 +185,6 @@ function renderQCM(qcm) {
             btn.textContent = choice;
             
             btn.onclick = () => {
-                // Désactiver tous les boutons de cette question après le clic
                 const siblingBtns = div.querySelectorAll(".qcm-choice-btn");
                 siblingBtns.forEach(b => b.style.pointerEvents = "none");
 
@@ -141,27 +206,29 @@ function renderQCM(qcm) {
     });
 }
 
-document.addEventListener("DOMContentLoaded", loadDocuments);
-input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askQuestion(); } });
 
-documentSelect.addEventListener("change", () => {
-    const selected = documentSelect.value;
-    const info = document.getElementById("selected-course");
+input.addEventListener("keydown", (e) => { 
+    if (e.key === "Enter" && !e.shiftKey) { 
+        e.preventDefault(); 
+        askQuestion(); 
+    } 
+});
+
+
+
+window.setMode = setMode; 
+
+document.addEventListener("DOMContentLoaded", () => {
+    loadDocuments();
+    setMode('GLOBAL'); 
+});
+
+document.getElementById('card-search')?.addEventListener('input', function(e) {
+    const term = e.target.value.toLowerCase();
+    const cards = document.querySelectorAll('.doc-card');
     
-    if (selected) {
-        // On met à jour le contenu
-        info.innerHTML = `<i class="fas fa-file-alt"></i> Focus : <strong>${selected}</strong>`;
-        
-        // On applique la couleur HEIP
-        info.style.color = "var(--accent-color)";
-        
-        // On ajoute l'animation de battement
-        info.classList.remove("pulse-animation");
-        void info.offsetWidth; // "Magic trick" pour redémarrer l'animation CSS
-        info.classList.add("pulse-animation");
-    } else {
-        info.textContent = "Aucun document chargé";
-        info.style.color = "";
-        info.classList.remove("pulse-animation");
-    }
+    cards.forEach(card => {
+        const text = card.innerText.toLowerCase();
+        card.style.display = text.includes(term) ? 'flex' : 'none';
+    });
 });

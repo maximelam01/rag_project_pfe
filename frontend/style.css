@@ -31,9 +31,10 @@ body {
 .sidebar {
     width: 300px;
     background: var(--sidebar-bg);
-    padding: 2rem;
+    padding: 1.5rem;
     display: flex;
     flex-direction: column;
+    height: 100vh; /* Toute la hauteur */
     border-right: 1px solid rgba(255,255,255,0.1);
 }
 
@@ -54,6 +55,13 @@ body {
     color: var(--text-dim);
     margin-bottom: 0.5rem;
     letter-spacing: 1px;
+}
+
+.sidebar-section {
+    flex: 1; /* Cette section va prendre tout l'espace et gérer le scroll */
+    overflow: hidden; 
+    display: flex;
+    flex-direction: column;
 }
 
 select {
@@ -251,4 +259,147 @@ textarea {
     display: inline-block;
     animation: heartBeat 0.8s ease-in-out;
     color: var(--accent-color) !important;
+}
+
+.mode-selector {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.mode-btn {
+    flex: 1;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.mode-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.mode-btn.active {
+    background: #96151b; /* Ta couleur rouge HEIP */
+    border-color: #96151b;
+    box-shadow: 0 0 10px rgba(150, 21, 27, 0.3);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Container de cartes avec scrollbar fine */
+#document-list-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    margin-top: 2rem; /* Ajoute l'écart ici (environ 32px) */
+    border-top: 1px solid rgba(255, 255, 255, 0.05); /* Optionnel : une fine ligne de séparation */
+    padding-top: 1.5rem; /* Optionnel : un peu d'espace sous la ligne */
+}
+
+.document-cards-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+    
+    /* On limite la hauteur pour ne pas pousser le badge PFE en bas */
+    max-height: 400px; 
+    overflow-y: auto; /* Scroll vertical si débordement */
+    padding-right: 10px; /* Espace pour la scrollbar */
+}
+
+/* Custom scrollbar pour la sidebar */
+.document-cards-grid::-webkit-scrollbar {
+    width: 5px;
+}
+.document-cards-grid::-webkit-scrollbar-thumb {
+    background: var(--accent-color);
+    border-radius: 10px;
+}
+
+.document-cards-grid::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.doc-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 14px;
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.doc-card:hover {
+    background: rgba(255, 255, 255, 0.07);
+    transform: translateX(5px);
+    border-color: rgba(150, 21, 27, 0.5);
+}
+
+/* État sélectionné : Fond rouge transparent et bordure vive */
+.doc-card.selected {
+    background: rgba(150, 21, 27, 0.15);
+    border-color: var(--accent-color);
+    color: #fff;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.doc-card i {
+    color: var(--text-dim);
+    transition: color 0.3s;
+}
+
+.doc-card.selected i {
+    color: var(--accent-color);
+}
+
+/* Petit badge de sélection */
+.doc-card.selected::after {
+    content: '✓';
+    margin-left: auto;
+    font-weight: bold;
+    color: var(--accent-color);
+}
+
+.doc-card span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis; /* Ajoute "..." si le texte est trop long */
+    max-width: 180px; /* Ajuste selon la largeur de ta sidebar */
+}
+
+/* Style pour la barre de recherche des cours */
+.search-input {
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 10px; /* Espace entre la barre de recherche et les cartes */
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: white;
+    outline: none;
+}
+
+.search-input:focus {
+    border-color: var(--accent-color);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.search-input::placeholder {
+    color: var(--text-dim);
+    opacity: 0.6;
 }
